@@ -21,6 +21,8 @@ Upstream contribution will be done via **stacked PRs**. Internally we maintain t
 - PR 1 complete & merged: **Config layer** — `repo_owner`/`repo_name` now optional when `github_project_number` is present (Projects v2). Doctor updated to be friendly about the new mode. Tests added/updated.
   - Merge commit on develop: cb954cb
   - Draft upstream-style PR on fork: christso/kata#2
+- PR 2 complete & merged: **Projects v2 query** — now captures per-item `repository` (nameWithOwner + owner login + name) from the GraphQL response. `ProjectItem` carries optional `repo_owner`/`repo_name`. All existing tests pass; query fragment asserted.
+  - Latest merge on develop: 6cf3af1
 
 ## How to Continue
 
