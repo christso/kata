@@ -415,11 +415,21 @@ impl GithubAdapter {
         let mut issues = Vec::new();
 
         for item in project_items {
-            let issue = match self.client.get_issue(item.issue_number).await {
+            // Prefer per-item repository when present (from PR2 query data + PR3 client methods).
+            // Falls back to the adapter's primary client repo for backward compat / single-repo boards.
+            let issue = match (&item.repo_owner, &item.repo_name) {
+                (Some(owner), Some(repo)) => {
+                    self.client.get_issue_in_repo(owner, repo, item.issue_number).await
+                }
+                _ => self.client.get_issue(item.issue_number).await,
+            };
+            let issue = match issue {
                 Ok(issue) => issue,
                 Err(SymphonyError::GithubApiStatus { status: 404, .. }) => {
                     tracing::debug!(
                         issue_number = item.issue_number,
+                        repo_owner = ?item.repo_owner,
+                        repo_name = ?item.repo_name,
                         "GitHub issue missing while reading Projects v2 candidate"
                     );
                     continue;
@@ -515,7 +525,13 @@ impl GithubAdapter {
         let mut issues = Vec::new();
 
         for item in project_items {
-            let issue = match self.client.get_issue(item.issue_number).await {
+            let issue = match (&item.repo_owner, &item.repo_name) {
+                (Some(owner), Some(repo)) => {
+                    self.client.get_issue_in_repo(owner, repo, item.issue_number).await
+                }
+                _ => self.client.get_issue(item.issue_number).await,
+            };
+            let issue = match issue {
                 Ok(issue) => issue,
                 Err(SymphonyError::GithubApiStatus { status: 404, .. }) => {
                     tracing::debug!(
