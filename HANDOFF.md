@@ -1,6 +1,6 @@
 # Handoff: Symphony GitHub Multi-Repo Projects v2 Support
 
-**Status**: Pre-implementation handoff
+**Status**: PR 1 merged into `develop` (internal use); continuing stacked implementation
 
 ## Goal
 
@@ -12,26 +12,24 @@ Upstream contribution will be done via **stacked PRs**. Internally we maintain t
 
 - [Gap Analysis & Learnings](docs/proposals/symphony-github-multi-repo-gap.md)
 - [Stacked PR Plan & Strategy](docs/proposals/stacked-pr-plan-symphony-multi-repo.md)
+- PR 1 scope (historical): `docs/PR1-config-layer-scope.md`
 
-## Current State
+## Current State (as of 2026-05)
 
 - `main` branch tracks upstream (`gannonh/kata`)
-- `develop` branch = our working fork with all planned changes
-- First PR branch created: `feat/symphony-config-optional-repo-projects-v2`
+- `develop` branch = working fork with merged stack (for immediate internal use on multi-repo boards)
+- PR 1 complete & merged: **Config layer** — `repo_owner`/`repo_name` now optional when `github_project_number` is present (Projects v2). Doctor updated to be friendly about the new mode. Tests added/updated.
+  - Merge commit on develop: cb954cb
+  - Draft upstream-style PR on fork: christso/kata#2
 
 ## How to Continue
 
-1. Start with the first PR branch:
-   ```bash
-   git checkout feat/symphony-config-optional-repo-projects-v2
-   ```
-
-2. Read the scope document on that branch:
-   `docs/PR1-config-layer-scope.md`
-
-3. This PR is the safest, smallest first step (making repo fields optional for Projects v2 only).
-
-4. Follow the stacked plan in `docs/proposals/stacked-pr-plan-symphony-multi-repo.md`.
+1. Work is now done directly against (or merged into) `develop`.
+2. Next up: PR 2 — extend the Projects v2 GraphQL query to capture per-item repository information (`apps/symphony/src/github/projects_v2.rs` + `ProjectItem*` structs).
+3. Create focused feature branches off `develop` for each remaining PR in the stack (see plan).
+4. Merge each PR into `develop` as it lands (for internal testing).
+5. Rebase `develop` onto latest upstream `main` periodically.
+6. Update this HANDOFF.md after each merge.
 
 ## Important Context
 
@@ -39,14 +37,16 @@ Upstream contribution will be done via **stacked PRs**. Internally we maintain t
 - GitHub natively supports multi-repo (even repo-agnostic) Projects.
 - We are using stacked PRs for upstream because the repo culture favors focused changes.
 - Full backward compatibility for existing single-repo users is mandatory.
+- Early PRs give partial functionality; full end-to-end multi-repo dispatch requires PRs 2–5 at minimum.
 
 ## Next Agent Responsibilities
 
-- Implement PR 1 (config layer) following the scope doc
-- Maintain clean, atomic commit history within each PR
-- Keep `develop` updated as upstream PRs land
+- Continue the stack on `develop` (PR 2 next: query repo-per-item capture)
+- Keep `develop` green and usable for real multi-repo boards as layers land
+- Add characterization / E2E tests as soon as the core (query + client + adapter + helpers) supports them
 - Update this HANDOFF.md as the plan evolves
+- When ready, open focused PRs from the feature branches to upstream
 
 ---
 
-*Last updated during initial handoff (May 2026)*
+*Last updated after PR 1 merge into develop (May 2026)*
