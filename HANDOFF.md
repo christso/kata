@@ -23,7 +23,8 @@ Upstream contribution will be done via **stacked PRs**. Internally we maintain t
   - Draft upstream-style PR on fork: christso/kata#2
 - PR 2 complete & merged: **Projects v2 query** — now captures per-item `repository` (nameWithOwner + owner login + name) from the GraphQL response. `ProjectItem` carries optional `repo_owner`/`repo_name`. All existing tests pass; query fragment asserted.
   - Latest merge on develop: 6cf3af1
-- PR 3 (in progress on develop): **GithubClient** — added `get_issue_in_repo(owner, repo, ...)` and `list_issues_in_repo(...)` (old methods delegate for compat). This is the foundation for talking to multiple repos from one client instance.
+- PR 3 (partial, on develop): **GithubClient** — added `get_issue_in_repo(owner, repo, ...)` and `list_issues_in_repo(...)` (old methods delegate for compat).
+- Adapter bridge (landed on develop): main Projects v2 fetch paths now call the per-item repo variants when `ProjectItem` carries repo data from the query. This is a major step — Symphony can now *fetch* issues that live in secondary repos on a real multi-repo board. Helper layer (PR5) and workspace/PR creation still need work for full dispatch.
 
 ## How to Continue
 
