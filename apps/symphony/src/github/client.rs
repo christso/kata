@@ -214,9 +214,20 @@ impl GithubClient {
         state_filter: &str,
         labels: &[String],
     ) -> Result<Vec<GithubIssue>> {
+        self.list_issues_in_repo(&self.repo_owner, &self.repo_name, state_filter, labels).await
+    }
+
+    /// List issues from an arbitrary repository (multi-repo support, PR3).
+    pub async fn list_issues_in_repo(
+        &self,
+        owner: &str,
+        repo: &str,
+        state_filter: &str,
+        labels: &[String],
+    ) -> Result<Vec<GithubIssue>> {
         let mut url = reqwest::Url::parse(&format!(
-            "{}/repos/{}/{}/issues",
-            self.base_url, self.repo_owner, self.repo_name
+            "{}/repos/{owner}/{repo}/issues",
+            self.base_url
         ))
         .map_err(|err| SymphonyError::GithubApiRequest(format!("invalid issues URL: {err}")))?;
 
@@ -233,10 +244,13 @@ impl GithubClient {
     }
 
     pub async fn get_issue(&self, number: u64) -> Result<GithubIssue> {
-        let path = format!(
-            "/repos/{}/{}/issues/{number}",
-            self.repo_owner, self.repo_name
-        );
+        self.get_issue_in_repo(&self.repo_owner, &self.repo_name, number).await
+    }
+
+    /// Fetch an issue from an arbitrary repository (supports multi-repo Projects v2 boards).
+    /// Added in PR3 of the multi-repo stack.
+    pub async fn get_issue_in_repo(&self, owner: &str, repo: &str, number: u64) -> Result<GithubIssue> {
+        let path = format!("/repos/{owner}/{repo}/issues/{number}");
         self.request_json(Method::GET, &path, None).await
     }
 
