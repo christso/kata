@@ -23,6 +23,7 @@ Upstream contribution will be done via **stacked PRs**. Internally we maintain t
   - Draft upstream-style PR on fork: christso/kata#2
 - PR 2 complete & merged: **Projects v2 query** — now captures per-item `repository` (nameWithOwner + owner login + name) from the GraphQL response. `ProjectItem` carries optional `repo_owner`/`repo_name`. All existing tests pass; query fragment asserted.
   - Latest merge on develop: 6cf3af1
+- PR 3 (in progress on develop): **GithubClient** — added `get_issue_in_repo(owner, repo, ...)` and `list_issues_in_repo(...)` (old methods delegate for compat). This is the foundation for talking to multiple repos from one client instance.
 
 ## How to Continue
 
