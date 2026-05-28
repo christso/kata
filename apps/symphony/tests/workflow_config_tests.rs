@@ -324,7 +324,33 @@ tracker:
 }
 
 #[test]
-fn test_github_tracker_config_missing_repo_owner_errors() {
+fn test_github_tracker_config_optional_repo_with_projects_v2() {
+    // PR1: repo_owner/repo_name may be omitted when github_project_number is provided.
+    // This enables multi-repo and repo-agnostic org Projects v2 boards.
+    let yaml_str = r#"
+tracker:
+  kind: github
+  api_key: github-test-token
+  github_project_owner_type: org
+  github_project_number: 3
+"#;
+
+    let raw: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
+    let config = from_workflow(&raw).expect("github projects v2 config without repo fields should now parse");
+
+    assert_eq!(config.tracker.kind.as_deref(), Some("github"));
+    assert_eq!(config.tracker.repo_owner, None);
+    assert_eq!(config.tracker.repo_name, None);
+    assert_eq!(config.tracker.github_project_number, Some(3));
+    assert_eq!(
+        config.tracker.github_project_owner_type,
+        Some(GithubProjectOwnerType::Org)
+    );
+}
+
+#[test]
+fn test_github_tracker_config_requires_owner_type_and_project() {
+    // github always requires owner_type + project_number (repo is optional for v2).
     let yaml_str = r#"
 tracker:
   kind: github
@@ -333,11 +359,12 @@ tracker:
 "#;
 
     let raw: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
-    let err = from_workflow(&raw).expect_err("missing repo_owner should fail for github tracker");
+    let err = from_workflow(&raw).expect_err("incomplete github tracker should fail");
 
+    // Should hit the owner_type requirement (first github-specific check after kind)
     assert!(
-        matches!(err, SymphonyError::InvalidWorkflowConfig(ref msg) if msg == "tracker.repo_owner is required when tracker.kind is github"),
-        "expected github repo_owner validation error, got: {err}"
+        matches!(err, SymphonyError::InvalidWorkflowConfig(ref msg) if msg.contains("github_project_owner_type")),
+        "expected github owner_type validation error, got: {err}"
     );
 }
 
@@ -1674,7 +1701,8 @@ fn test_config_validation_github_missing_token_errors() {
 }
 
 #[test]
-fn test_config_validation_github_missing_repo_owner_errors() {
+fn test_config_validation_github_missing_repo_owner_errors_when_no_project() {
+    // With no github_project_number, repo fields are still required (legacy/non-v2 path).
     let config = ServiceConfig {
         tracker: TrackerConfig {
             kind: Some("github".to_string()),
@@ -1682,7 +1710,7 @@ fn test_config_validation_github_missing_repo_owner_errors() {
             repo_owner: None,
             repo_name: Some("kata".to_string()),
             github_project_owner_type: Some(GithubProjectOwnerType::Org),
-            github_project_number: Some(42),
+            github_project_number: None, // explicit: no project => repo required
             ..TrackerConfig::default()
         },
         ..ServiceConfig::default()
@@ -1690,14 +1718,15 @@ fn test_config_validation_github_missing_repo_owner_errors() {
 
     let result = validate(&config);
     assert!(
-        matches!(result, Err(SymphonyError::InvalidWorkflowConfig(ref msg)) if msg == "tracker.repo_owner is required when tracker.kind is github"),
-        "missing github repo_owner should fail validation, got: {:?}",
+        matches!(result, Err(SymphonyError::InvalidWorkflowConfig(ref msg)) if msg.contains("github_project_number")),
+        "github without project_number should fail on project required (repo no longer required for v2), got: {:?}",
         result
     );
 }
 
 #[test]
-fn test_config_validation_github_missing_repo_name_errors() {
+fn test_config_validation_github_missing_repo_name_errors_when_no_project() {
+    // With no github_project_number, repo fields are still required (legacy/non-v2 path).
     let config = ServiceConfig {
         tracker: TrackerConfig {
             kind: Some("github".to_string()),
@@ -1705,7 +1734,7 @@ fn test_config_validation_github_missing_repo_name_errors() {
             repo_owner: Some("kata-sh".to_string()),
             repo_name: None,
             github_project_owner_type: Some(GithubProjectOwnerType::Org),
-            github_project_number: Some(42),
+            github_project_number: None, // explicit: no project => repo required
             ..TrackerConfig::default()
         },
         ..ServiceConfig::default()
@@ -1713,8 +1742,8 @@ fn test_config_validation_github_missing_repo_name_errors() {
 
     let result = validate(&config);
     assert!(
-        matches!(result, Err(SymphonyError::InvalidWorkflowConfig(ref msg)) if msg == "tracker.repo_name is required when tracker.kind is github"),
-        "missing github repo_name should fail validation, got: {:?}",
+        matches!(result, Err(SymphonyError::InvalidWorkflowConfig(ref msg)) if msg.contains("github_project_number")),
+        "github without project_number should fail on project required (repo no longer required for v2), got: {:?}",
         result
     );
 }

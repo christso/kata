@@ -263,31 +263,27 @@ pub async fn check_github(config: &TrackerConfig) -> Vec<DoctorCheckResult> {
     let token_source = resolved_token.source;
     let token = resolved_token.token;
 
-    let Some(repo_owner) = config
+    let repo_owner = config
         .repo_owner
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        results.push(DoctorCheckResult::error(
-            "GitHub Repo",
-            "tracker.repo_owner is required when tracker.kind is github",
-        ));
-        return results;
-    };
-
-    let Some(repo_name) = config
+        .filter(|value| !value.is_empty());
+    let repo_name = config
         .repo_name
         .as_deref()
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
+        .filter(|value| !value.is_empty());
+    let has_primary_repo = repo_owner.is_some() && repo_name.is_some();
+
+    // PR1: repo is optional for github + github_project_number (multi-repo Projects v2 support).
+    // We only hard-require for the (currently unsupported) non-project github case.
+    if !has_primary_repo && config.github_project_number.is_none() {
         results.push(DoctorCheckResult::error(
             "GitHub Repo",
-            "tracker.repo_name is required when tracker.kind is github",
+            "tracker.repo_owner and repo_name are required when tracker.kind is github without github_project_number",
         ));
-        return results;
-    };
+        // Continue to PAT check (for better UX) but repo-dependent checks will be skipped later.
+    }
 
     let label_prefix = config
         .label_prefix
@@ -303,10 +299,19 @@ pub async fn check_github(config: &TrackerConfig) -> Vec<DoctorCheckResult> {
         endpoint
     };
 
+    // When no primary repo (new multi-repo Projects v2 configs), use placeholders for the
+    // GithubClient. The /user PAT check and GraphQL project queries do not rely on the
+    // repo fields stored in the client.
+    let (client_owner, client_name) = if has_primary_repo {
+        (repo_owner.unwrap().to_string(), repo_name.unwrap().to_string())
+    } else {
+        ("placeholder".to_string(), "placeholder".to_string())
+    };
+
     let client = GithubClient::with_base_url(
         token,
-        repo_owner.to_string(),
-        repo_name.to_string(),
+        client_owner,
+        client_name,
         label_prefix.to_string(),
         endpoint,
     );
@@ -363,43 +368,56 @@ pub async fn check_github(config: &TrackerConfig) -> Vec<DoctorCheckResult> {
         }
     };
 
-    let repo_ok = if pat_ok {
-        let repo_path = format!("/repos/{repo_owner}/{repo_name}");
-        match client.request(Method::GET, &repo_path, None).await {
-            Ok(_) => {
-                results.push(DoctorCheckResult::pass(
-                    "GitHub Repo",
-                    format!("Repository {repo_owner}/{repo_name} accessible"),
-                ));
-                true
+    let repo_ok = if has_primary_repo {
+        if pat_ok {
+            let ro = repo_owner.unwrap();
+            let rn = repo_name.unwrap();
+            let repo_path = format!("/repos/{ro}/{rn}");
+            match client.request(Method::GET, &repo_path, None).await {
+                Ok(_) => {
+                    results.push(DoctorCheckResult::pass(
+                        "GitHub Repo",
+                        format!("Repository {ro}/{rn} accessible"),
+                    ));
+                    true
+                }
+                Err(SymphonyError::GithubApiStatus { status: 404, .. }) => {
+                    results.push(DoctorCheckResult::error(
+                        "GitHub Repo",
+                        format!("Repository {ro}/{rn} not found (HTTP 404)"),
+                    ));
+                    false
+                }
+                Err(SymphonyError::GithubApiStatus { status, .. }) => {
+                    results.push(DoctorCheckResult::warning(
+                        "GitHub Repo",
+                        format!("Repository {ro}/{rn} check returned HTTP {status}"),
+                    ));
+                    false
+                }
+                Err(err) => {
+                    results.push(DoctorCheckResult::warning(
+                        "GitHub Repo",
+                        format!("Repository {ro}/{rn} check failed: {err}"),
+                    ));
+                    false
+                }
             }
-            Err(SymphonyError::GithubApiStatus { status: 404, .. }) => {
-                results.push(DoctorCheckResult::error(
-                    "GitHub Repo",
-                    format!("Repository {repo_owner}/{repo_name} not found (HTTP 404)"),
-                ));
-                false
-            }
-            Err(SymphonyError::GithubApiStatus { status, .. }) => {
-                results.push(DoctorCheckResult::warning(
-                    "GitHub Repo",
-                    format!("Repository {repo_owner}/{repo_name} check returned HTTP {status}"),
-                ));
-                false
-            }
-            Err(err) => {
-                results.push(DoctorCheckResult::warning(
-                    "GitHub Repo",
-                    format!("Repository {repo_owner}/{repo_name} check failed: {err}"),
-                ));
-                false
-            }
+        } else {
+            results.push(DoctorCheckResult::skipped(
+                "GitHub Repo",
+                "Skipped because PAT authentication failed",
+            ));
+            false
         }
-    } else {
+    } else if config.github_project_number.is_some() {
         results.push(DoctorCheckResult::skipped(
             "GitHub Repo",
-            "Skipped because PAT authentication failed",
+            "Primary repo not configured (multi-repo / org-level Projects v2 board)",
         ));
+        false
+    } else {
+        // Error already emitted above for the no-project + no-repo case
         false
     };
 
@@ -409,10 +427,12 @@ pub async fn check_github(config: &TrackerConfig) -> Vec<DoctorCheckResult> {
                 "GitHub Project",
                 "Skipped because PAT authentication failed",
             ));
-        } else {
+        } else if has_primary_repo || repo_owner.is_some() {
+            // Use repo_owner as the project owner login when available.
+            let project_owner_for_check = repo_owner.unwrap();
             let projects_client = ProjectsV2Client::new(client.clone());
             match projects_client
-                .resolve_status_field(repo_owner, project_number)
+                .resolve_status_field(project_owner_for_check, project_number)
                 .await
             {
                 Ok(status_field) => {
@@ -441,6 +461,12 @@ pub async fn check_github(config: &TrackerConfig) -> Vec<DoctorCheckResult> {
                     results.push(DoctorCheckResult::error("GitHub Project", message));
                 }
             }
+        } else {
+            // project_number present but no usable owner for project validation (true multi-repo case in PR1)
+            results.push(DoctorCheckResult::skipped(
+                "GitHub Project",
+                "Skipped (no repo_owner provided to use as project owner for validation). Provide tracker.repo_owner (the org/user owning the board) to enable full project doctor checks.",
+            ));
         }
 
         results.push(DoctorCheckResult::skipped(

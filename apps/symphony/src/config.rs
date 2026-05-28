@@ -653,16 +653,6 @@ pub fn from_workflow(config: &Value) -> Result<ServiceConfig> {
     let label_prefix = None;
 
     if matches!(tracker_kind.as_deref(), Some("github")) {
-        if repo_owner.is_none() {
-            return Err(SymphonyError::InvalidWorkflowConfig(
-                "tracker.repo_owner is required when tracker.kind is github".to_string(),
-            ));
-        }
-        if repo_name.is_none() {
-            return Err(SymphonyError::InvalidWorkflowConfig(
-                "tracker.repo_name is required when tracker.kind is github".to_string(),
-            ));
-        }
         if github_project_owner_type.is_none() {
             return Err(SymphonyError::InvalidWorkflowConfig(
                 "tracker.github_project_owner_type is required when tracker.kind is github; use 'user' or 'org'".to_string(),
@@ -673,6 +663,9 @@ pub fn from_workflow(config: &Value) -> Result<ServiceConfig> {
                 "tracker.github_project_number is required when tracker.kind is github; GitHub Projects v2 is the only supported GitHub state backend".to_string(),
             ));
         }
+        // NOTE (PR1 multi-repo): repo_owner/repo_name are OPTIONAL when using GitHub Projects v2.
+        // This enables org-level / repo-agnostic projects and boards spanning multiple repos.
+        // (Label-based GitHub without project_number would still require them, but is not currently supported.)
     }
 
     let endpoint_default = if matches!(tracker_kind.as_deref(), Some("github")) {
@@ -1280,32 +1273,6 @@ pub fn validate(config: &ServiceConfig) -> Result<ValidatedServiceConfig> {
             ));
         }
 
-        if config
-            .tracker
-            .repo_owner
-            .as_deref()
-            .map(str::trim)
-            .map(|owner| owner.is_empty())
-            .unwrap_or(true)
-        {
-            return Err(SymphonyError::InvalidWorkflowConfig(
-                "tracker.repo_owner is required when tracker.kind is github".to_string(),
-            ));
-        }
-
-        if config
-            .tracker
-            .repo_name
-            .as_deref()
-            .map(str::trim)
-            .map(|repo| repo.is_empty())
-            .unwrap_or(true)
-        {
-            return Err(SymphonyError::InvalidWorkflowConfig(
-                "tracker.repo_name is required when tracker.kind is github".to_string(),
-            ));
-        }
-
         if config.tracker.github_project_owner_type.is_none() {
             return Err(SymphonyError::InvalidWorkflowConfig(
                 "tracker.github_project_owner_type is required when tracker.kind is github; use 'user' or 'org'".to_string(),
@@ -1317,6 +1284,11 @@ pub fn validate(config: &ServiceConfig) -> Result<ValidatedServiceConfig> {
                 "tracker.github_project_number is required when tracker.kind is github; GitHub Projects v2 is the only supported GitHub state backend".to_string(),
             ));
         }
+
+        // NOTE (PR1 multi-repo): repo_owner and repo_name are OPTIONAL for GitHub + Projects v2.
+        // This is the config-layer change to support multi-repo / org-level repo-agnostic projects.
+        // Full resolution of per-item repos happens in later layers (adapter, helpers, etc.).
+        // If both are absent here we simply proceed (later code may require a primary for some ops until PR3+).
 
         if let Some(project_number) = config.tracker.github_project_number {
             tracing::debug!(project_number, "Projects v2 mode active");
