@@ -55,6 +55,13 @@ query($projectId: ID!, $first: Int!, $after: String) {
           content {
             ... on Issue {
               number
+              repository {
+                nameWithOwner
+                owner {
+                  login
+                }
+                name
+              }
               blockedBy(first: 100) {
                 nodes {
                   ... on Issue {
@@ -123,6 +130,10 @@ pub struct ProjectItem {
     pub status: Option<String>,
     pub kata_id: Option<String>,
     pub blocked_by_issue_numbers: Vec<u64>,
+    /// Repository owning this issue (captured from Projects v2 for multi-repo boards).
+    /// Populated starting in PR2 of the multi-repo stack.
+    pub repo_owner: Option<String>,
+    pub repo_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -238,12 +249,34 @@ impl ProjectsV2Client {
                     }
                 }
 
+                // Extract repository from the content (new in PR2 for multi-repo support).
+                let (repo_owner, repo_name) = content
+                    .repository
+                    .as_ref()
+                    .map(|r| {
+                        let owner = r.owner.as_ref().and_then(|o| o.login.clone())
+                            .or_else(|| {
+                                r.name_with_owner.as_ref().and_then(|nwo| {
+                                    nwo.split('/').next().map(|s| s.to_string())
+                                })
+                            });
+                        let name = r.name.clone().or_else(|| {
+                            r.name_with_owner.as_ref().and_then(|nwo| {
+                                nwo.split('/').nth(1).map(|s| s.to_string())
+                            })
+                        });
+                        (owner, name)
+                    })
+                    .unwrap_or((None, None));
+
                 items.push(ProjectItem {
                     item_id: node.id,
                     issue_number,
                     status: node.status.and_then(|status| status.name),
                     kata_id: node.kata_id.and_then(|value| value.text),
                     blocked_by_issue_numbers,
+                    repo_owner,
+                    repo_name,
                 });
             }
 
@@ -429,8 +462,22 @@ struct ProjectItemNode {
 #[derive(Debug, Deserialize)]
 struct ProjectItemContent {
     number: Option<u64>,
+    repository: Option<ProjectItemRepository>,
     #[serde(rename = "blockedBy")]
     blocked_by: Option<ProjectIssueDependencyConnection>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct ProjectItemRepository {
+    #[serde(rename = "nameWithOwner")]
+    name_with_owner: Option<String>,
+    owner: Option<ProjectRepositoryOwner>,
+    name: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct ProjectRepositoryOwner {
+    login: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

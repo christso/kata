@@ -303,6 +303,10 @@ fn test_projects_v2_queries_use_plain_status_literal() {
         "QUERY_PROJECT_ITEMS should query native issue dependencies"
     );
     assert!(
+        QUERY_PROJECT_ITEMS.contains("repository") && QUERY_PROJECT_ITEMS.contains("nameWithOwner"),
+        "QUERY_PROJECT_ITEMS should request repository info per issue for multi-repo Projects v2 support (PR2)"
+    );
+    assert!(
         !QUERY_PROJECT_ITEMS.contains("Kata Blocked By")
             && !QUERY_PROJECT_ITEMS.contains("Kata Blocking"),
         "QUERY_PROJECT_ITEMS should not query custom dependency text fields"
